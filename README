@@ -30,6 +30,22 @@ Inplace build (run without installation):
     ./setup.py build_ext --inplace
 
 
+pHash Build
+-----------
+
+Download source from:
+    http://www.phash.org/
+
+Build requires:
+    cimg-dev
+
+Build:
+    ./configure --disable-video-hash --disable-audio-hash --enable-pthread --enable-openmp
+    make
+    sudo make install
+    sudo ldconfig
+
+
 Programming Documentation
 -------------------------
 
