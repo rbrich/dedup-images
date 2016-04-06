@@ -1,3 +1,4 @@
 build/
+doc/build/
 pyx/phash.cpp
 phash.*.so

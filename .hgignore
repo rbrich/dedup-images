@@ -1,9 +1,0 @@
-__pycache__
-^build/
-^doc/build/
-^pyx/phash.cpp$
-^phash\..*\.so$
-^\.(pydev)?project$
-^\.idea/
-
-^sample_

@@ -6,7 +6,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor as PoolExecutor
 from concurrent.futures import Future
 
-from imagedups.imagehash import ImageHash, compute_hash
+from imagedups.imagehash import ImageHash, DctImageHash, compute_hash
 from imagedups.hashdb import HashDB
 from imagedups.dbindex import DBIndex
 
@@ -37,69 +37,80 @@ class ImageDups:
     FORMATS = ['.png', '.jpeg', '.jpg', '.tiff', '.tif']
 
     def __init__(self):
+        self.path = None
+        self.imagehash_class = DctImageHash
+        self.threshold = 90.0
+        self.samplefile = None
+        self.recursive = False
+        self.extviewer = False
+        self.program = 'gthumb'
+        self.dbpath = '~/.imagedups'
         self.dbfile = '.imagehash'
         self.parser = argparse.ArgumentParser(
             description=self.__doc__.strip(),
             formatter_class=argparse.RawDescriptionHelpFormatter)
-        self.parser.add_argument('path', nargs='?', help='Path to directory of images')
+        self.parser.add_argument('path', nargs='?', help='Target directory with images to hash')
         self.parser.add_argument('--hash', action='store_true', help='Compute hashes of images.')
         self.parser.add_argument('--search', action='store_true', help='Compare hashes, find similar images.')
         self.parser.add_argument('--clean', action='store_true', help='Remove files created during --hash phase.')
-        self.parser.add_argument('-a', '--algorithm', default='dct', help='Image hash algorithm. Options: dct | mh | radial. Default: dct')
-        self.parser.add_argument('-t', '--threshold', type=float, default=90.0, help='Minimal similarity ratio of compared images. Default: 90%%')
+        self.parser.add_argument('-a', '--algorithm', default='dct', help='Image hash algorithm. Options: dct | mh | radial. Default: %(default)s')
+        self.parser.add_argument('-t', '--threshold', type=float, default=self.threshold, help='Minimal similarity ratio of compared images. Default: %(default)s%%')
         self.parser.add_argument('-f', '--samplefile', help='Search for duplicates of this file.')
         self.parser.add_argument('-r', '--recursive', action='store_true', help='Walk subdirectories recursively.')
-        self.parser.add_argument('-i', '--inplace', action='store_true', help='Write .imagehash file in same directory where images reside.')
         self.parser.add_argument('-x', '--extviewer', action='store_true', help='Use external program to view matching images.')
-        self.parser.add_argument('-p', '--program', default='gthumb', help='External program to view images. See -x. Default: gthumb')
-        self.parser.add_argument('--dbpath', default='~/.imagedups', help='Path where database files will be written and read from.')
+        self.parser.add_argument('-p', '--program', default=self.program, help='External program to view images. See -x. Default: %(default)s')
+        self.parser.add_argument('--dbpath', default=self.dbpath, help='Path where database files will be written and read from. Default: %(default)s')
 
     def main(self):
-        self.args = self.parser.parse_args()
-        self.args.dbpath = os.path.expanduser(self.args.dbpath)
-        os.makedirs(self.args.dbpath, exist_ok=True)
-        self.dbfile += '_' + self.args.algorithm
-        self.imagehash_class = ImageHash.get_subclass(self.args.algorithm)
-        if self.args.hash or not (self.args.search or self.args.clean):
+        # Process program args
+        args = self.parser.parse_args()
+        self.path = args.path
+        self.threshold = args.threshold
+        self.samplefile = args.samplefile
+        self.recursive = args.recursive
+        self.extviewer = args.extviewer
+        self.program = args.program
+        self.dbpath = os.path.expanduser(args.dbpath)
+        self.dbfile += '_' + args.algorithm
+        self.imagehash_class = ImageHash.get_subclass(args.algorithm)
+        # Execute commands
+        os.makedirs(self.dbpath, exist_ok=True)
+        if args.hash or not (args.search or args.clean):
             self.cmd_hash()
-        if self.args.search or not (self.args.hash or self.args.clean):
+        if args.search or not (args.hash or args.clean):
             self.cmd_search()
-        if self.args.clean:
+        if args.clean:
             self.cmd_clean()
 
     def cmd_hash(self):
-        if not self.args.path:
+        if not self.path:
             print('Path must be specified')
             return
-        dbindex = DBIndex(os.path.join(self.args.dbpath, 'index'))
+        dbindex = DBIndex(os.path.join(self.dbpath, 'index'))
         try:
             for dirpath, filenames in self.all_directories_with_filenames():
-                if not self.args.inplace:
-                    name = dbindex.get_name_by_path(dirpath)
-                    dbfile = os.path.join(self.args.dbpath, name + self.dbfile)
-                else:
-                    dbfile = os.path.join(dirpath, self.dbfile)
+                name = dbindex.get_name_by_path(dirpath)
+                dbfile = os.path.join(self.dbpath, name + self.dbfile)
                 self.update_db(dirpath, filenames, dbfile)
         finally:
             dbindex.save()
 
     def cmd_search(self):
-        dbindex = DBIndex(os.path.join(self.args.dbpath, 'index'))
+        dbindex = DBIndex(os.path.join(self.dbpath, 'index'))
         hashdb = HashDB(self.imagehash_class)
-        if self.args.path:
+        if self.path:
             # Search for duplicates in path
             for dirpath in self.all_directories():
-                inplace_dbfile = os.path.join(dirpath, self.dbfile)
                 name = dbindex.get_name_by_path(dirpath)
-                home_dbfile = os.path.join(self.args.dbpath, name + self.dbfile)
-                hashdb.try_load(inplace_dbfile, home_dbfile, basepath=dirpath)
+                home_dbfile = os.path.join(self.dbpath, name + self.dbfile)
+                hashdb.try_load(home_dbfile, basepath=dirpath)
         else:
             # Search for duplicates in all hashed images from database
             for name, path in dbindex.items():
-                home_dbfile = os.path.join(self.args.dbpath, name + self.dbfile)
+                home_dbfile = os.path.join(self.dbpath, name + self.dbfile)
                 hashdb.try_load(home_dbfile, basepath=path)
-        if self.args.samplefile:
-            self.compare_with_db(hashdb, self.args.samplefile)
+        if self.samplefile:
+            self.compare_with_db(hashdb, self.samplefile)
         else:
             self.search_db_for_dups(hashdb)
 
@@ -109,16 +120,16 @@ class ImageDups:
             self.clean_db(dbfile)
 
     def all_directories(self):
-        path = os.path.abspath(self.args.path)
-        if self.args.recursive:
+        path = os.path.abspath(self.path)
+        if self.recursive:
             for dirpath, _dirnames, _filenames in os.walk(path):
                 yield dirpath
         else:
             yield path
 
     def all_directories_with_filenames(self):
-        path = os.path.abspath(self.args.path)
-        if self.args.recursive:
+        path = os.path.abspath(self.path)
+        if self.recursive:
             for dirpath, _dirnames, filenames in os.walk(path):
                 filenames = [fname for fname in filenames if self.is_image(fname)]
                 filenames.sort()
@@ -184,7 +195,7 @@ class ImageDups:
         last_fname = None
         i = 1
         file_list = []
-        threshold = 1.0 - (self.args.threshold / 100)
+        threshold = 1.0 - (self.threshold / 100)
         for fname_a, fname_b, distance in hashdb.find_all_dups_without_derived(threshold):
             if fname_a != last_fname:
                 if self.view(file_list, test_stop=True):
@@ -203,7 +214,7 @@ class ImageDups:
         imghash = self.imagehash_class(samplefile)
         print(samplefile)
         file_list = [samplefile]
-        threshold = 1.0 - (self.args.threshold / 100)
+        threshold = 1.0 - (self.threshold / 100)
         for fname, distance in hashdb.query(imghash, threshold):
             self.print_out(fname, distance)
             file_list.append(fname)
@@ -219,11 +230,11 @@ class ImageDups:
         Waits for external program to exit before continuing.
 
         """
-        if file_list and self.args.extviewer:
+        if file_list and self.extviewer:
             print('* Waiting for subprocess...', end='')
             sys.stdout.flush()
             with open(os.devnull, "w") as devnull:
-                subprocess.call([self.args.program] + file_list, stdout=devnull, stderr=devnull)
+                subprocess.call([self.program] + file_list, stdout=devnull, stderr=devnull)
             print('\r' + ' '*30 + '\r', end='')
             if test_stop and self.test_stop():
                 return True
