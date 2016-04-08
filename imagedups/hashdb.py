@@ -1,120 +1,161 @@
-from collections import OrderedDict
-import time
+import hashlib
 import os
+from itertools import combinations
+
+from .imagehash import ImageHash
+
+
+class HashItem:
+
+    """Files are indexed by content properties:
+
+    - file size
+    - first 512 bytes hashed
+    - whole content hashed
+    - perceptual image hashes
+
+    Same content can bear one or more filenames.
+
+    """
+
+    def __init__(self, filename=None):
+        self.file_names = {filename} if filename else set()
+        self.file_size = 0
+        self.first_512_sha256 = None
+        self._content_sha256 = None
+        self.image_hash = {}
+        self._partial_hash = None
+        self._file = None
+        if filename:
+            self._file = open(filename, 'rb')
+            self.file_size = os.fstat(self._file.fileno()).st_size
+            data = self._file.read(512)
+            self._partial_hash = hashlib.sha256(data)
+            self.first_512_sha256 = self._partial_hash.hexdigest()
+
+    def compare(self, other: 'HashItem', fast=False):
+        """Compare binary content.
+
+        File names don't matter.
+        Neither image hashes matter, they should be same when binary content is.
+
+        Fast compare checks only file size and first 512 bytes.
+
+        """
+        return (self.file_size == other.file_size and
+                self.first_512_sha256 == other.first_512_sha256 and
+                (fast or self.content_sha256 == other.content_sha256))
+
+    @property
+    def content_sha256(self):
+        """Content hash is coputed lazily"""
+        if self._file and self._partial_hash:
+            while True:
+                data = self._file.read(32 * 1024)
+                if data:
+                    self._partial_hash.update(data)
+                else:
+                    break
+            self._content_sha256 = self._partial_hash.hexdigest()
+            self._file.close()
+            self._file = None
+            self._partial_hash = None
+        return self._content_sha256
+
+    def dump(self) -> dict:
+        """Dump the attributes into dict for easy serialization."""
+        d = {
+            'names': tuple(self.file_names),
+            'size': self.file_size,
+            'first_512b_sha256': self.first_512_sha256,
+            'sha256': self.content_sha256,
+        }
+        for name, value in self.image_hash.items():
+            d['ph_' + name] = str(value)
+        return d
+
+    @classmethod
+    def load(cls, d: dict) -> 'HashItem':
+        """Load the attributes from dict into new instance."""
+        i = cls()
+        i.file_names = set(d['names'])
+        i.file_size = d['size']
+        i.first_512_sha256 = d['first_512b_sha256']
+        i._content_sha256 = d['sha256']
+        for name, value in d.items():
+            if name.startswith('ph_'):
+                name = name[3:]
+                i.image_hash[name] = ImageHash.get_subclass(name).load(value)
+        return i
 
 
 class HashDB:
-    def __init__(self, imagehash_class):
-        self._hashes = OrderedDict()
-        self._timestamp = int(time.time())
-        self._imagehash_class = imagehash_class
 
-    @property
-    def timestamp(self):
-        """Time of hash database creation."""
-        return self._timestamp
+    def __init__(self):
+        # List of HashItem objects
+        self.items = []
 
-    def clear(self):
-        self._hashes.clear()
-        self._timestamp = int(time.time())
+    def add(self, filename, fast_compare=False):
+        """Add `filename` to database.
 
-    def add(self, fname, imghash):
-        """Add hash to database.
+        First, bitwise hash is computed, then it's compared to all items
+        in database. If the content is equal to existing item, then the filename
+        is added to this item. Otherwise new item is created.
 
-        Args:
-            fname: File name of image hashed, should not contain path.
-            imghash: Instance of ImageHash.
+        If `fast_compare` is requested, only hash of first 512 bytes and file
+        size are compared.
+
+        Returns HashItem object (added or found) with the filename.
 
         """
-        self._hashes[fname] = imghash
+        file_hash = HashItem(filename)
+        for item in self.items:
+            if item.compare(file_hash, fast=fast_compare):
+                item.file_names.add(filename)
+                return item
+        self.items.append(file_hash)
+        return file_hash
 
-    def get(self, fname):
-        """Get hash from database.
+    def filter_by_path(self, path):
+        """Keep items with filename in `path`, drop the rest."""
+        filtered_items = []
+        for item in self.items:
+            filtered_names = {name for name in item.file_names
+                              if name.startswith(path)}
+            if filtered_names:
+                item.file_names = filtered_names
+                filtered_items.append(item)
+        return filtered_items
 
-        If not found, returns None.
-
-        """
-        if fname in self._hashes:
-            return self._hashes[fname]
-
-    def save(self, dbfile):
-        """Save database to file.
-
-        Empty database is "saved" as no file.
-        Existing file is overwritten or removed.
-
-        Args:
-            dbfile: Target file name, including path.
-
-        """
-        if not self._hashes:
-            try:
-                os.unlink(dbfile)
-            except OSError:
-                pass
-            return
-        with open(dbfile, 'w', encoding='utf8') as f:
-            print('#algorithm', self._imagehash_class.algorithm(), file=f)
-            print('#timestamp', self._timestamp, file=f)
-            for fname, imghash in self._hashes.items():
-                print(imghash, fname, file=f)
-
-    def load(self, dbfile, basepath=''):
-        """Load database from file.
-
-        Args:
-            dbfile: Source file, including path.
-            basepath: Path do prepend to all file names loaded from file.
-
-        """
-        with open(dbfile, 'r', encoding='utf8') as f:
-            for line in f:
-                if line[0] == '#':
-                    self._parse_control_line(line)
-                else:
-                    hexhash, fname = line.rstrip().split(' ', 1)
-                    imghash = self._imagehash_class()
-                    imghash.load(hexhash)
-                    self.add(os.path.join(basepath, fname), imghash)
-        print('Loaded', dbfile)
-
-    def try_load(self, *args, basepath=''):
-        for filename in args:
-            try:
-                self.load(filename, basepath)
-                break
-            except IOError:
-                pass
-        else:
-            return False
-        return True
-
-    def query(self, imghash, threshold=0.0):
-        """Find images close to given hash."""
-        for fname, hash_b in self._hashes.items():
-            distance = imghash.distance(hash_b)
-            if distance <= threshold:
-                yield fname, distance
-
-    def find_all_dups(self, threshold=0.0):
+    def find_all_dups(self, threshold, hash_name):
         """Find similar images in database.
 
         Returns:
             Generator of tuples (fname_a, fname_b, distance).
             fname_a, fname_b: File names of pair of similar images.
-            distance: Normalized distance of hashes.
+            distance: Normalized distance of hashes
+                      or None for bitwise equal files.
 
         Returned pairs are sorted by fname_a.
 
         """
-        hash_items = list(self._hashes.items())
-        for idx, (fname_a, hash_a) in enumerate(hash_items):
-            for fname_b, hash_b in hash_items[idx+1:]:
-                distance = hash_a.distance(hash_b)
-                if distance <= threshold:
-                    yield fname_a, fname_b, distance
+        for item_a, item_b in combinations(self.items, 2):
+            # Need file names for report
+            if not item_a.file_names or not item_b.file_names:
+                continue
+            # Need hashes to compare
+            hash_a = item_a.image_hash.get(hash_name)
+            hash_b = item_b.image_hash.get(hash_name)
+            if not hash_a or not hash_b:
+                continue
+            # Compare and report with one of file names
+            distance = hash_a.distance(hash_b)
+            if distance <= threshold:
+                fname_a = sorted(item_a.file_names)[0]
+                fname_b = sorted(item_b.file_names)[0]
+                yield fname_a, fname_b, distance
 
-    def find_all_dups_without_derived(self, threshold=0.0):
+    def find_all_dups_without_derived(self, threshold, hash_name):
         """Find similar images in database, skipping derived pairs.
 
         This is variant of :meth:`find_all_dups`, which avoids
@@ -123,7 +164,7 @@ class HashDB:
 
         """
         reported = dict()
-        for fname_a, fname_b, distance in self.find_all_dups(threshold):
+        for fname_a, fname_b, distance in self.find_all_dups(threshold, hash_name):
             for key in reported:
                 if fname_a in reported[key] and fname_b in reported[key]:
                     # If both A and B were reported before as duplicates of X,
@@ -131,12 +172,34 @@ class HashDB:
                     break
             else:
                 yield fname_a, fname_b, distance
-                if not fname_a in reported:
+                if fname_a not in reported:
                     reported[fname_a] = set()
                 reported[fname_a].add(fname_b)
 
-    def _parse_control_line(self, line):
-        parts = line.split(' ')
-        if len(parts) == 2 and parts[0] == '#timestamp':
-            self._timestamp = int(parts[1])
+    def query(self, imghash, threshold, hash_name):
+        """Find images close to given hash."""
+        for item in self.items:
+            item_hash = item.image_hash.get(hash_name)
+            distance = imghash.distance(item_hash)
+            if distance <= threshold:
+                fname = sorted(item.file_names)[0]
+                yield fname, distance
 
+    def dump(self) -> list:
+        return [item.dump() for item in self.items]
+
+    @classmethod
+    def load(cls, l: list) -> 'HashDB':
+        i = cls()
+        i.items = [HashItem.load(d) for d in l]
+        return i
+
+
+if __name__ == "__main__":
+    # Self test
+    hashdb = HashDB()
+    hashdb.add(__file__)
+    dumped = hashdb.dump()
+    print(dumped)
+    i2 = HashDB.load(dumped)
+    print(i2.dump())

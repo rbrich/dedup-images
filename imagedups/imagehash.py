@@ -71,10 +71,13 @@ class DctImageHash(ImageHash):
     def compute(self, filename):
         self._hash = phash.dct_imagehash(filename)
 
-    def load(self, hexhash):
-        self._hash = int(hexhash, 16)
+    @classmethod
+    def load(cls, hexhash):
+        i = cls()
+        i._hash = int(hexhash, 16)
+        return i
 
-    def distance(self, other):
+    def distance(self, other: 'DctImageHash'):
         return phash.hamming_distance(self._hash, other._hash) / 64
 
     def __str__(self):
@@ -96,10 +99,13 @@ class MhImageHash(ImageHash):
     def compute(self, filename):
         self._hash = phash.mh_imagehash(filename)
 
-    def load(self, hexhash):
-        self._hash = binascii.unhexlify(hexhash.encode())
+    @classmethod
+    def load(cls, hexhash):
+        i = cls()
+        i._hash = binascii.unhexlify(hexhash.encode())
+        return i
 
-    def distance(self, other):
+    def distance(self, other: 'MhImageHash'):
         return phash.hamming_distance_2(self._hash, other._hash)
 
     def __str__(self):
@@ -121,10 +127,13 @@ class RadialImageHash(ImageHash):
     def compute(self, filename):
         self._hash = phash.radial_imagehash(filename)
 
-    def load(self, hexhash):
-        self._hash = binascii.unhexlify(hexhash.encode())
+    @classmethod
+    def load(cls, hexhash):
+        i = cls()
+        i._hash = binascii.unhexlify(hexhash.encode())
+        return i
 
-    def distance(self, other):
+    def distance(self, other: 'RadialImageHash'):
         return 1.0 - phash.crosscorr(self._hash, other._hash)
 
     def __str__(self):
@@ -139,4 +148,3 @@ def compute_hash(imagehash_class, filepath):
         return None
     print(imghash, filepath)
     return imghash
-
