@@ -33,7 +33,7 @@ class HashItem:
             self._partial_hash = hashlib.sha256(data)
             self.first_512_sha256 = self._partial_hash.hexdigest()
 
-    def compare(self, other: 'HashItem', fast=False):
+    def binary_equal(self, other: 'HashItem', fast=False):
         """Compare binary content.
 
         File names don't matter.
@@ -45,6 +45,23 @@ class HashItem:
         return (self.file_size == other.file_size and
                 self.first_512_sha256 == other.first_512_sha256 and
                 (fast or self.content_sha256 == other.content_sha256))
+
+    def check_file_names(self, fast=False):
+        """Check files referenced by file names.
+
+        Remove file name if file no longer exists or was modified.
+
+        """
+        file_names_ok = set()
+        for filename in self.file_names:
+            # Open and check content
+            try:
+                file_hash = HashItem(filename)
+                if self.binary_equal(file_hash, fast=fast):
+                    file_names_ok.add(filename)
+            except IOError:
+                pass
+        self.file_names = file_names_ok
 
     @property
     def content_sha256(self):
@@ -110,11 +127,17 @@ class HashDB:
         """
         file_hash = HashItem(filename)
         for item in self.items:
-            if item.compare(file_hash, fast=fast_compare):
+            if item.binary_equal(file_hash, fast=fast_compare):
                 item.file_names.add(filename)
                 return item
         self.items.append(file_hash)
         return file_hash
+
+    def prune(self):
+        """Remove items without file names."""
+        for item in self.items[:]:
+            if not item.file_names:
+                self.items.remove(item)
 
     def filter_by_path(self, path):
         """Keep items with filename in `path`, drop the rest."""
@@ -125,7 +148,7 @@ class HashDB:
             if filtered_names:
                 item.file_names = filtered_names
                 filtered_items.append(item)
-        return filtered_items
+        self.items = filtered_items
 
     def find_all_dups(self, threshold, hash_name):
         """Find similar images in database.
