@@ -95,21 +95,22 @@ class ImageDups:
         self.threshold = args.threshold
         self.viewer = args.viewer
         self.dbpath = os.path.expanduser(args.db)
+        path = os.path.realpath(os.path.expanduser(args.path))
         cmd_specified = (args.hash or args.cleanup or args.prune or args.search)
         self.load_database(must_exist=cmd_specified and not args.hash)
         # Execute commands
         if args.hash:
-            self.cmd_hash(args.path, args.recursive, args.fast)
+            self.cmd_hash(path, args.recursive, args.fast)
         if args.cleanup:
             self.cmd_cleanup(args.fast)
         if args.prune:
             self.cmd_prune()
         if args.search:
-            self.cmd_search(args.path, args.file)
+            self.cmd_search(path, args.file)
         if not cmd_specified:
-            self.cmd_hash(args.path, args.recursive, args.fast)
+            self.cmd_hash(path, args.recursive, args.fast)
             self.cmd_cleanup(args.fast)
-            self.cmd_search(args.path, args.file)
+            self.cmd_search(path, args.file)
 
     def cmd_hash(self, path, recursive, fast_compare=False):
         """Walk through `path` and add or update image hashes in database"""
@@ -127,7 +128,8 @@ class ImageDups:
         # If path was specified, search for duplicates only in path
         # Otherwise, all hashed images in database are searched
         if path:
-            self.hashdb.filter_by_path(os.path.realpath(path))
+            self.hashdb.filter_by_path(path)
+        print("Searching in %s files" % len(self.hashdb.items))
         # If sample file was specified, search for similar images
         # Otherwise, search whole database for groups of similar images
         if sample_file:
@@ -160,6 +162,7 @@ class ImageDups:
             with gzip.open(self.dbpath, 'rt', encoding='utf8') as f:
                 dbitems = json.load(f)
             self.hashdb = HashDB.load(dbitems)
+            print("Loaded database: %s files" % len(self.hashdb.items))
         except IOError:
             if must_exist:
                 raise
@@ -173,7 +176,6 @@ class ImageDups:
             json.dump(dbitems, f, indent='\t')
 
     def list_directories(self, path, recursive):
-        path = os.path.abspath(path)
         if recursive:
             for dirpath, _dirnames, filenames in os.walk(path):
                 filenames = [fname for fname in filenames
@@ -259,7 +261,7 @@ class ImageDups:
         similarity = (1.0 - distance) * 100.0
         print(fname, '(%.0f%%)' % similarity)
 
-    def view(self, file_list, test_stop=False):
+    def view(self, file_list):
         """Display files from `file_list` using external program.
 
         Waits for external program to exit before continuing.
@@ -268,7 +270,7 @@ class ImageDups:
 
         """
         if not self.viewer or not len(file_list):
-            return
+            return True
         print('* Waiting for subprocess...', end='')
         sys.stdout.flush()
         try:
