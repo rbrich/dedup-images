@@ -115,7 +115,7 @@ class HashDB:
     def add(self, filename, fast_compare=False):
         """Add `filename` to database.
 
-        First, bitwise hash is computed, then it's compared to all items
+        First, binary content hash is computed, then it's compared to all items
         in database. If the content is equal to existing item, then the filename
         is added to this item. Otherwise new item is created.
 
@@ -153,11 +153,10 @@ class HashDB:
     def find_all_dups(self, threshold, hash_name):
         """Find similar images in database.
 
-        Returns:
-            Generator of tuples (fname_a, fname_b, distance).
-            fname_a, fname_b: File names of pair of similar images.
-            distance: Normalized distance of hashes
-                      or None for bitwise equal files.
+        Returns generator of tuples (fname_a, fname_b, distance):
+
+        * fname_a, fname_b: File names of pair of similar images.
+        * distance: Normalized distance of hashes.
 
         Returned pairs are sorted by fname_a.
 

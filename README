@@ -11,6 +11,10 @@ There are three algorithms for image comparison:
 For usage info, see:
     imagedups.py --help
 
+Example usage:
+
+    imagedups.py -r ~/Pictures -F -x gthumb
+
 
 Installation
 ------------
