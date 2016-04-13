@@ -118,7 +118,8 @@ class ImageDups:
         if path:
             paths_to_hash = [path]
         else:
-            paths_to_hash = self.hashdb.list_top_paths()
+            paths_to_hash = [p for p in self.hashdb.list_top_paths()
+                             if os.path.exists(p)]
         try:
             for path in paths_to_hash:
                 for dirpath, filenames in self.list_directories(path, recursive):
