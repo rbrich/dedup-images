@@ -150,6 +150,29 @@ class HashDB:
                 filtered_items.append(item)
         self.items = filtered_items
 
+    def list_top_paths(self) -> list:
+        """Get list of unique top paths of files in database.
+
+        The returned list is the minimal set of paths to contain
+        all file names in database while having at least one file
+        directly in each listed top directory.
+
+        """
+        paths = []
+        for item in self.items:
+            for filename in item.file_names:
+                dirname = os.path.dirname(filename)
+                for path in paths:
+                    if dirname.startswith(path):
+                        break
+                else:
+                    for path in paths[:]:
+                        if path.startswith(dirname):
+                            paths.remove(path)
+                    paths.append(dirname)
+        paths.sort()
+        return paths
+
     def find_all_dups(self, threshold, hash_name):
         """Find similar images in database.
 

@@ -95,7 +95,8 @@ class ImageDups:
         self.threshold = args.threshold
         self.viewer = args.viewer
         self.dbpath = os.path.expanduser(args.db)
-        path = os.path.realpath(os.path.expanduser(args.path))
+        path = os.path.realpath(os.path.expanduser(args.path)) \
+            if args.path else None
         cmd_specified = (args.hash or args.cleanup or args.prune or args.search)
         self.load_database(must_exist=cmd_specified and not args.hash)
         # Execute commands
@@ -114,12 +115,14 @@ class ImageDups:
 
     def cmd_hash(self, path, recursive, fast_compare=False):
         """Walk through `path` and add or update image hashes in database"""
-        if not path:
-            print('Path must be specified')
-            return
+        if path:
+            paths_to_hash = [path]
+        else:
+            paths_to_hash = self.hashdb.list_top_paths()
         try:
-            for dirpath, filenames in self.list_directories(path, recursive):
-                self.update_db(dirpath, filenames, fast_compare)
+            for path in paths_to_hash:
+                for dirpath, filenames in self.list_directories(path, recursive):
+                    self.update_db(dirpath, filenames, fast_compare)
         finally:
             self.save_database()
 
@@ -154,7 +157,8 @@ class ImageDups:
         original_items_len = len(self.hashdb.items)
         self.hashdb.prune()
         pruned = original_items_len - len(self.hashdb.items)
-        print("Pruned", pruned, "hashed files without any file names")
+        if pruned:
+            print("Pruned", pruned, "hashed files without any file names")
         self.save_database()
 
     def load_database(self, must_exist=False):
@@ -194,7 +198,7 @@ class ImageDups:
             return True
 
     def update_db(self, path, filenames, fast_compare):
-        print('Hashing', path)
+        print('Updating', path)
         with PoolExecutor(max_workers=os.cpu_count() or 4) as executor:
             # Compute hashes for new or updated files
             hashes = []
