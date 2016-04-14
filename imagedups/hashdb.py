@@ -173,15 +173,15 @@ class HashDB:
         paths.sort()
         return paths
 
-    def find_all_dups(self, threshold, hash_name):
-        """Find similar images in database.
+    def find_pairs(self, threshold, hash_name):
+        """Find pairs of similar images.
 
         Returns generator of tuples (fname_a, fname_b, distance):
 
         * fname_a, fname_b: File names of pair of similar images.
         * distance: Normalized distance of hashes.
 
-        Returned pairs are sorted by fname_a.
+        Returned pairs can be grouped by fname_a without sorting.
 
         """
         for item_a, item_b in combinations(self.items, 2):
@@ -200,26 +200,42 @@ class HashDB:
                 fname_b = sorted(item_b.file_names)[0]
                 yield fname_a, fname_b, distance
 
-    def find_all_dups_without_derived(self, threshold, hash_name):
-        """Find similar images in database, skipping derived pairs.
+    def find_groups(self, threshold, hash_name):
+        """Find groups of similar images, skipping derived pairs.
 
-        This is variant of :meth:`find_all_dups`, which avoids
-        reporting subsets of already reported groups.
+        This builds on :meth:`find_pairs`, additionally grouping the pairs
+        by fname_a and avoiding reports of subsets of already reported pairs.
         For example: (x,a), (x,b), ... avoids (a,b) later.
 
+        Returns generator of (fname_a, [(fname_b, distance), ...])
+
         """
-        reported = dict()
-        for fname_a, fname_b, distance in self.find_all_dups(threshold, hash_name):
-            for key in reported:
-                if fname_a in reported[key] and fname_b in reported[key]:
+        reported_groups = []
+        current_fname_a = ''
+        current_group = dict()
+        for fname_a, fname_b, distance \
+                in self.find_pairs(threshold, hash_name):
+            for group in reported_groups:
+                if fname_a in group and fname_b in group:
                     # If both A and B were reported before as duplicates of X,
                     # skip this pair
                     break
             else:
-                yield fname_a, fname_b, distance
-                if fname_a not in reported:
-                    reported[fname_a] = set()
-                reported[fname_a].add(fname_b)
+                if current_fname_a == fname_a:
+                    # Extend current group
+                    current_group[fname_b] = distance
+                else:
+                    if current_fname_a:
+                        # Report previous group...
+                        yield (current_fname_a,
+                               sorted((fn, dist)
+                                      for fn, dist in current_group.items()))
+                        group_set = set(current_group.keys())
+                        group_set.add(current_fname_a)
+                        reported_groups.append(group_set)
+                    # ...and start new one
+                    current_fname_a = fname_a
+                    current_group = {fname_b: distance}
 
     def query(self, imghash, threshold, hash_name):
         """Find images close to given hash."""

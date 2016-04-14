@@ -139,8 +139,11 @@ class ImageDups:
         if sample_file:
             self.compare_with_db(sample_file)
         else:
-            self.show_binary_dupes()
-            self.search_db_for_dupes()
+            try:
+                self.show_binary_dupes()
+                self.search_db_for_dupes()
+            except StopIteration:
+                pass
 
     def cmd_cleanup(self, fast=False):
         """Check files in database, remove references
@@ -219,36 +222,34 @@ class ImageDups:
                 file_hash.image_hash[self.algorithm] = imghash
 
     def show_binary_dupes(self):
-        i = 1
-        for item in self.hashdb.items:
-            if len(item.file_names) > 1:
-                print('--- Files with same binary content (%s) ---' % i)
-                for fname in item.file_names:
-                    print(fname)
-                if not self.view(list(item.file_names)):
-                    break
-                i += 1
+        """List binary duplicates and show them in viewer.
+
+        Raises StopIteration if quit was requested.
+
+        """
+        items = (item for item in self.hashdb.items if len(item.file_names) > 1)
+        for n, item in enumerate(items, start=1):
+            print('--- Files with same binary content (%s) ---' % n)
+            for fname in item.file_names:
+                print(fname)
+            self.view(list(item.file_names))
 
     def search_db_for_dupes(self):
-        last_fname = None
-        i = 1
-        file_list = []
+        """List perceptual duplicates and show them in viewer.
+
+        Raises StopIteration if quit was requested.
+
+        """
         threshold = 1.0 - (self.threshold / 100)
-        for fname_a, fname_b, distance in \
-                self.hashdb.find_all_dups_without_derived(threshold,
-                                                          self.algorithm):
-            if fname_a != last_fname:
-                if not self.view(file_list):
-                    file_list = []
-                    break
-                print('--- Perceptually similar images (%s) ---' % i)
-                print(fname_a)
-                file_list = [fname_a]
-                last_fname = fname_a
-                i += 1
-            file_list.append(fname_b)
-            self.print_out(fname_b, distance)
-        self.view(file_list)
+        groups = self.hashdb.find_groups(threshold, self.algorithm)
+        for n, (fname_a, group) in enumerate(groups, start=1):
+            print('--- Perceptually similar images (%s) ---' % n)
+            print(fname_a)
+            file_list = [fname_a]
+            for fname_b, distance in group:
+                self.print_out(fname_b, distance)
+                file_list.append(fname_b)
+            self.view(file_list)
 
     def compare_with_db(self, sample_file):
         imagehash_class = ImageHash.get_subclass(self.algorithm)
@@ -275,10 +276,12 @@ class ImageDups:
 
         """
         if not self.viewer or not len(file_list):
-            return True
+            return
         print('* Waiting for subprocess...', end='')
         sys.stdout.flush()
         try:
-            return ViewHelper(self.viewer, file_list).main()
+            want_next = ViewHelper(self.viewer, file_list).main()
+            if not want_next:
+                raise StopIteration("Quit requested")
         finally:
             print('\r' + ' ' * 30 + '\r', end='')
