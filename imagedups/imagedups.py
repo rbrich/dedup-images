@@ -36,14 +36,16 @@ class ImageDups:
     Use '--prune' command to remove any items without file references
     from database. This is not needed unless the database grows too much.
 
-    Order of the phases if fixed:
+    Order of command execution is fixed (not affected by order of arguments):
 
-    1. hash
-    2. cleanup
-    3. prune
-    4. search
+    1. remove
+    2. hash
+    3. cleanup
+    4. prune
+    5. search
 
-    By default, if no command is specified, hash, cleanup and search are run.
+    By default, if no command is specified, the following are run:
+    hash, cleanup, search
 
     """
 
@@ -66,6 +68,8 @@ class ImageDups:
                         help=self.cmd_hash.__doc__)
         ap.add_argument('--search', action='store_true',
                         help=self.cmd_search.__doc__)
+        ap.add_argument('--remove', action='store_true',
+                        help=self.cmd_remove.__doc__)
         ap.add_argument('--cleanup', action='store_true',
                         help=self.cmd_cleanup.__doc__)
         ap.add_argument('--prune', action='store_true',
@@ -97,9 +101,12 @@ class ImageDups:
         self.dbpath = os.path.expanduser(args.db)
         path = os.path.realpath(os.path.expanduser(args.path)) \
             if args.path else None
-        cmd_specified = (args.hash or args.cleanup or args.prune or args.search)
+        cmd_specified = (args.hash or args.search or args.remove or
+                         args.cleanup or args.prune)
         self.load_database(must_exist=cmd_specified and not args.hash)
         # Execute commands
+        if args.remove:
+            self.cmd_remove(path, args.recursive)
         if args.hash:
             self.cmd_hash(path, args.recursive, args.fast)
         if args.cleanup:
@@ -144,6 +151,20 @@ class ImageDups:
                 self.search_db_for_dupes()
             except StopIteration:
                 pass
+
+    def cmd_remove(self, path, recursive):
+        """Remove files in path from database"""
+        def in_path(filename):
+            if recursive:
+                return filename.startswith(path)
+            else:
+                return os.path.dirname(filename) == path
+        for item in self.hashdb.items:
+            filtered = {fn for fn in item.file_names if not in_path(fn)}
+            for removed_filename in item.file_names.difference(filtered):
+                print("Removing", removed_filename)
+            item.file_names = filtered
+        self.save_database()
 
     def cmd_cleanup(self, fast=False):
         """Check files in database, remove references
@@ -222,20 +243,27 @@ class ImageDups:
                 file_hash.image_hash[self.algorithm] = imghash
 
     def show_binary_dupes(self):
-        """List binary duplicates and show them in viewer.
+        """View groups of files with same binary content.
+
+        The file names from each group are printed
+        and optionally sent to the viewer.
 
         Raises StopIteration if quit was requested.
 
         """
         items = (item for item in self.hashdb.items if len(item.file_names) > 1)
         for n, item in enumerate(items, start=1):
-            print('--- Files with same binary content (%s) ---' % n)
+            title = "Binary equal (set #%s)" % n
+            print('--- %s ---' % title)
             for fname in item.file_names:
                 print(fname)
-            self.view(list(item.file_names))
+            self.view(title, list(item.file_names))
 
     def search_db_for_dupes(self):
-        """List perceptual duplicates and show them in viewer.
+        """Find and view groups of perceptually similar images.
+
+        The file names from each group are printed
+        and optionally sent to the viewer.
 
         Raises StopIteration if quit was requested.
 
@@ -243,13 +271,14 @@ class ImageDups:
         threshold = 1.0 - (self.threshold / 100)
         groups = self.hashdb.find_groups(threshold, self.algorithm)
         for n, (fname_a, group) in enumerate(groups, start=1):
-            print('--- Perceptually similar images (%s) ---' % n)
+            title = "Perceptually similar (set #%s)" % n
+            print('--- %s ---' % title)
             print(fname_a)
             file_list = [fname_a]
             for fname_b, distance in group:
                 self.print_out(fname_b, distance)
                 file_list.append(fname_b)
-            self.view(file_list)
+            self.view(title, file_list)
 
     def compare_with_db(self, sample_file):
         imagehash_class = ImageHash.get_subclass(self.algorithm)
@@ -261,13 +290,13 @@ class ImageDups:
                                                  self.algorithm):
             self.print_out(fname, distance)
             file_list.append(fname)
-        self.view(file_list)
+        self.view("Perceptually similar", file_list)
 
     def print_out(self, fname, distance):
         similarity = (1.0 - distance) * 100.0
         print(fname, '(%.0f%%)' % similarity)
 
-    def view(self, file_list):
+    def view(self, title, file_list):
         """Display files from `file_list` using external program.
 
         Waits for external program to exit before continuing.
@@ -277,10 +306,11 @@ class ImageDups:
         """
         if not self.viewer or not len(file_list):
             return
+        title += " - imagedups"
         print('* Waiting for subprocess...', end='')
         sys.stdout.flush()
         try:
-            want_next = ViewHelper(self.viewer, file_list).main()
+            want_next = ViewHelper(title, file_list, self.viewer).main()
             if not want_next:
                 raise StopIteration("Quit requested")
         finally:

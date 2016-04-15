@@ -1,17 +1,20 @@
+import os.path
 import tkinter
+import tkinter.messagebox
 from subprocess import Popen, DEVNULL
+from functools import partial
 
 
 class ViewHelper:
 
-    def __init__(self, viewer, file_list):
+    def __init__(self, title, file_list, viewer):
         self._viewer = viewer
         self._file_list = file_list
         self._p = None
         self._want_next = False
 
         root = self.root = tkinter.Tk()
-        root.title("imagedups helper")
+        root.title(title)
         root.protocol("WM_DELETE_WINDOW", self._quit)
         root.after(200, self._timer)
 
@@ -24,6 +27,19 @@ class ViewHelper:
         btn_quit["text"] = "Quit"
         btn_quit["command"] = self._quit
         btn_quit.pack({"side": "left"})
+
+        self.buttons = []
+        prefix = os.path.commonprefix(file_list)
+        prefix_len = len(prefix)
+        # When prefix ends with slash, keep it
+        if prefix and prefix[-1] == '/':
+            prefix_len -= 1
+        for fname in file_list:
+            btn = tkinter.Button(root)
+            btn["text"] = "Delete ..." + fname[prefix_len:]
+            btn["command"] = partial(self._delete, fname, btn)
+            btn.pack({"side": "left"})
+            self.buttons.append(btn)
 
     def main(self):
         self._p = Popen([self._viewer] + self._file_list,
@@ -40,6 +56,13 @@ class ViewHelper:
         self._p.wait()
         self.root.destroy()
 
+    def _delete(self, filename, btn):
+        if tkinter.messagebox.askyesno("Confirm file deletion",
+                                       "Delete %s?" % filename,
+                                       icon=tkinter.messagebox.WARNING):
+            os.unlink(filename)
+            btn['state'] = 'disabled'
+
     def _timer(self):
         status = self._p.poll()
         if status is not None:
@@ -51,7 +74,7 @@ class ViewHelper:
 
 
 if __name__ == '__main__':
-    res = ViewHelper('gthumb', []).main()
+    res = ViewHelper("test 1", [], 'gthumb').main()
     print("next:", res)
     if res:
-        ViewHelper('gthumb', []).main()
+        ViewHelper("test 2", [], 'gthumb').main()
