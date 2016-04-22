@@ -7,7 +7,7 @@ from concurrent.futures import ThreadPoolExecutor as PoolExecutor
 
 from imagedups.imagehash import ImageHash, compute_hash
 from imagedups.hashdb import HashDB
-from imagedups.viewer import ViewHelper
+from imagedups.config import Config
 
 
 class ImageDups:
@@ -51,11 +51,11 @@ class ImageDups:
 
     FORMATS = ['.png', '.jpeg', '.jpg', '.tiff', '.tif']
 
-    def __init__(self):
-        self.algorithm = 'mh'
-        self.threshold = 90.0
-        self.viewer = None
-        self.dbpath = '~/.imagedups'
+    def __init__(self, cfg: Config):
+        self.algorithm = cfg.algorithm
+        self.threshold = cfg.threshold
+        self.viewer = cfg.viewer
+        self.dbpath = cfg.dbpath
         self.hashdb = HashDB()
 
     def process_args(self):
@@ -87,8 +87,10 @@ class ImageDups:
                         help='Search for duplicates of this file')
         ap.add_argument('-r', '--recursive', action='store_true',
                         help='Recursively traverse into subdirectories')
-        ap.add_argument('-x', '--viewer',
-                        help='External program to view matching images')
+        ap.add_argument('-x', '--view', action='store_true',
+                        help='View matching images (Tk GUI + %s viewer)' % self.viewer)
+        ap.add_argument('--skip-bin', action='store_true',
+                        help='Do not report binary equal sets')
         ap.add_argument('--db', metavar="HASHDB", default=self.dbpath,
                         help='Hash database. Default: %(default)s')
         return ap.parse_args()
@@ -97,7 +99,6 @@ class ImageDups:
         args = self.process_args()
         self.algorithm = args.algorithm
         self.threshold = args.threshold
-        self.viewer = args.viewer
         self.dbpath = os.path.expanduser(args.db)
         path = os.path.realpath(os.path.expanduser(args.path)) \
             if args.path else None
@@ -114,11 +115,11 @@ class ImageDups:
         if args.prune:
             self.cmd_prune()
         if args.search:
-            self.cmd_search(path, args.file)
+            self.cmd_search(path, args.file, args.skip_bin, args.view)
         if not cmd_specified:
             self.cmd_hash(path, args.recursive, args.fast)
             self.cmd_cleanup(args.fast)
-            self.cmd_search(path, args.file)
+            self.cmd_search(path, args.file, args.skip_bin, args.view)
 
     def cmd_hash(self, path, recursive, fast_compare=False):
         """Walk through `path` and add or update image hashes in database"""
@@ -134,7 +135,7 @@ class ImageDups:
         finally:
             self.save_database()
 
-    def cmd_search(self, path, sample_file=None):
+    def cmd_search(self, path, sample_file=None, skip_bin=False, view=False):
         """Search database for similar images in `path`"""
         # If path was specified, search for duplicates only in path
         # Otherwise, all hashed images in database are searched
@@ -144,11 +145,12 @@ class ImageDups:
         # If sample file was specified, search for similar images
         # Otherwise, search whole database for groups of similar images
         if sample_file:
-            self.compare_with_db(sample_file)
+            self.compare_with_db(sample_file, view)
         else:
             try:
-                self.show_binary_dupes()
-                self.search_db_for_dupes()
+                if not skip_bin:
+                    self.show_binary_dupes(view)
+                self.search_db_for_dupes(view)
             except StopIteration:
                 pass
 
@@ -242,7 +244,7 @@ class ImageDups:
                 imghash = future_imghash.result(timeout=60)
                 file_hash.image_hash[self.algorithm] = imghash
 
-    def show_binary_dupes(self):
+    def show_binary_dupes(self, gui=False):
         """View groups of files with same binary content.
 
         The file names from each group are printed
@@ -257,9 +259,10 @@ class ImageDups:
             print('--- %s ---' % title)
             for fname in item.file_names:
                 print(fname)
-            self.view(title, list(item.file_names))
+            if gui:
+                self.view(title, list(item.file_names))
 
-    def search_db_for_dupes(self):
+    def search_db_for_dupes(self, gui=False):
         """Find and view groups of perceptually similar images.
 
         The file names from each group are printed
@@ -278,9 +281,10 @@ class ImageDups:
             for fname_b, distance in group:
                 self.print_out(fname_b, distance)
                 file_list.append(fname_b)
-            self.view(title, file_list)
+            if gui:
+                self.view(title, file_list)
 
-    def compare_with_db(self, sample_file):
+    def compare_with_db(self, sample_file, gui=False):
         imagehash_class = ImageHash.get_subclass(self.algorithm)
         sample_hash = imagehash_class(sample_file)
         print(sample_file)
@@ -290,7 +294,8 @@ class ImageDups:
                                                  self.algorithm):
             self.print_out(fname, distance)
             file_list.append(fname)
-        self.view("Perceptually similar", file_list)
+        if gui:
+            self.view("Perceptually similar", file_list)
 
     def print_out(self, fname, distance):
         similarity = (1.0 - distance) * 100.0
@@ -304,7 +309,8 @@ class ImageDups:
         Returns True if view should continue, False to stop.
 
         """
-        if not self.viewer or not len(file_list):
+        from imagedups.viewer import ViewHelper
+        if not len(file_list):
             return
         title += " - imagedups"
         print('* Waiting for subprocess...', end='')
