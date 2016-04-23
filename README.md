@@ -42,10 +42,10 @@ I also suggest to change the image viewer to your favorite light-weight
 alternative. I use `feh`.
 
 The default `xdg-open` should open some viewer
-on any system, but it's usually full-blown photo viewer, which is not so good
+on any system, but it's usually full-blown photo viewer, which is not good
 for one-shot image viewing.
 
-Just edit the config file at `~/.cache/imagedups.hashdb`.
+Just edit the config file at `~/.config/imagedups.conf`.
 
 
 Installation

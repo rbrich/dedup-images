@@ -46,7 +46,7 @@ class HashItem:
                 self.first_512_sha256 == other.first_512_sha256 and
                 (fast or self.content_sha256 == other.content_sha256))
 
-    def check_file_names(self, fast=False):
+    def check_file_names(self, path=None, fast=False):
         """Check files referenced by file names.
 
         Remove file name if file no longer exists or was modified.
@@ -54,6 +54,9 @@ class HashItem:
         """
         file_names_ok = set()
         for filename in self.file_names:
+            if path and not filename.startswith(path):
+                file_names_ok.add(filename)
+                continue
             # Open and check content
             try:
                 file_hash = HashItem(filename)

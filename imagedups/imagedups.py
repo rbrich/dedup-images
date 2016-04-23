@@ -111,14 +111,14 @@ class ImageDups:
         if args.hash:
             self.cmd_hash(path, args.recursive, args.fast)
         if args.cleanup:
-            self.cmd_cleanup(args.fast)
+            self.cmd_cleanup(path, args.fast)
         if args.prune:
             self.cmd_prune()
         if args.search:
             self.cmd_search(path, args.file, args.skip_bin, args.view)
         if not cmd_specified:
             self.cmd_hash(path, args.recursive, args.fast)
-            self.cmd_cleanup(args.fast)
+            self.cmd_cleanup(path, args.fast)
             self.cmd_search(path, args.file, args.skip_bin, args.view)
 
     def cmd_hash(self, path, recursive, fast_compare=False):
@@ -155,7 +155,7 @@ class ImageDups:
                 pass
 
     def cmd_remove(self, path, recursive):
-        """Remove files in path from database"""
+        """Remove files in `path` from database"""
         def in_path(filename):
             if recursive:
                 return filename.startswith(path)
@@ -168,12 +168,13 @@ class ImageDups:
             item.file_names = filtered
         self.save_database()
 
-    def cmd_cleanup(self, fast=False):
-        """Check files in database, remove references
+    def cmd_cleanup(self, path=None, fast=False):
+        """Check files in `path`, remove references
         to deleted or modified files from the database"""
+        print("Checking %s" % (path or 'database'))
         for item in self.hashdb.items:
             original_file_names = item.file_names
-            item.check_file_names(fast=fast)
+            item.check_file_names(path=path, fast=fast)
             for filename in original_file_names.difference(item.file_names):
                 print("Removing dead file reference", filename)
         self.save_database()

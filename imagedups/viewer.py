@@ -67,20 +67,24 @@ class ViewHelper:
             # Frame for image and info
             frm = tkinter.Frame(root, bd=1, relief=tkinter.SUNKEN, height=2)
             frm.pack(fill=tkinter.X)
+            frm.grid_rowconfigure(3, weight=1)
+            frm.grid_columnconfigure(0, pad=8)
+            frm.grid_columnconfigure(2, pad=8)
 
             # Image button
             photo_image = frm.ref_photo_image = ImageTk.PhotoImage(info.image)
             imgbtn = frm.ref_imgbtn = tkinter.Button(frm, image=photo_image)
             imgbtn["command"] = partial(self._open, fname)
-            imgbtn.grid(row=0, rowspan=5, column=0)
+            imgbtn.grid(row=0, rowspan=5, column=0, pady=8)
 
             # Info labels
             def add_info(row, name, value, differs=False):
                 color = "red2" if differs else None
+                pad = (8, 0) if row == 0 else 0
                 label_name = tkinter.Label(frm, text=name)
-                label_name.grid(row=row, column=1, sticky=tkinter.W)
+                label_name.grid(row=row, column=1, sticky=tkinter.NW, pady=pad)
                 label_value = tkinter.Label(frm, text=value, fg=color)
-                label_value.grid(row=row, column=2, sticky=tkinter.W)
+                label_value.grid(row=row, column=2, sticky=tkinter.NW, pady=pad)
                 return label_name, label_value
             frm.ref_fname = add_info(0, "File name:", info.filename)
             frm.ref_fsize = add_info(1, "File size:", info.filesize, d_fsize)
@@ -91,7 +95,7 @@ class ViewHelper:
             btn = frm.ref_btn = tkinter.Button(frm)
             btn["text"] = "Delete"
             btn["command"] = partial(self._delete, fname, frm)
-            btn.grid(row=4, column=1, columnspan=2, sticky=tkinter.SW)
+            btn.grid(row=4, column=1, columnspan=2, sticky=tkinter.SW, pady=8)
 
             # Keep references
             self.image_frames.append(frm)
