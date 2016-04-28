@@ -314,7 +314,7 @@ class ImageDups:
         if not len(file_list):
             return
         title += " - imagedups"
-        print('* Waiting for subprocess...', end='')
+        print('* Opening GUI...', end='')
         sys.stdout.flush()
         try:
             want_next = ViewHelper(title, file_list, self.viewer).main()

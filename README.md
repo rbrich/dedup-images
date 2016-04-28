@@ -33,6 +33,8 @@ GUI
 The program contains simple GUI to show identified groups of similar images.
 Use `-x` option to switch on the GUI.
 
+![Imagedups GUI screenshot](doc/source/static/imagedups-viewer.png)
+
 The GUI requires few common Python modules:
 
 * tkinter (python3-tk)
