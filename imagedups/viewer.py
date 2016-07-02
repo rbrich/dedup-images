@@ -44,7 +44,8 @@ class ViewHelper:
 
         image_info = {}
         ImageInfo = namedtuple('ImageInfo', ['image', 'filename', 'filesize',
-                                             'pixelsize', 'imageformat'])
+                                             'pixelsize', 'imageformat',
+                                             'error'])
         for fname in file_list:
             # Probe image, make thumbnail
             image = Image.open(fname)
@@ -52,9 +53,13 @@ class ViewHelper:
             filesize = "{:,} B".format(os.path.getsize(fname))
             pixelsize = "%s x %s" % image.size
             imageformat = "%s / %s" % (image.format, image.mode)
-            image.thumbnail((128, 128))
-            image_info[fname] = ImageInfo(image, filename,
-                                          filesize, pixelsize, imageformat)
+            error = None
+            try:
+                image.thumbnail((128, 128))
+            except OSError as e:
+                error = str(e)
+            image_info[fname] = ImageInfo(image, filename, filesize,
+                                          pixelsize, imageformat, error)
 
         self.image_frames = []
         for fname in file_list:
@@ -67,7 +72,7 @@ class ViewHelper:
             # Frame for image and info
             frm = tkinter.Frame(root, bd=1, relief=tkinter.SUNKEN, height=2)
             frm.pack(fill=tkinter.X)
-            frm.grid_rowconfigure(3, weight=1)
+            frm.grid_rowconfigure(4, weight=1)
             frm.grid_columnconfigure(0, pad=8)
             frm.grid_columnconfigure(2, pad=8)
 
@@ -75,27 +80,34 @@ class ViewHelper:
             photo_image = frm.ref_photo_image = ImageTk.PhotoImage(info.image)
             imgbtn = frm.ref_imgbtn = tkinter.Button(frm, image=photo_image)
             imgbtn["command"] = partial(self._open, fname)
-            imgbtn.grid(row=0, rowspan=5, column=0, pady=8)
+            imgbtn.grid(row=0, rowspan=6, column=0, pady=8)
 
             # Info labels
             def add_info(row, name, value, differs=False):
-                color = "red2" if differs else None
+                color = "DarkOrange2" if differs else None
                 pad = (8, 0) if row == 0 else 0
                 label_name = tkinter.Label(frm, text=name)
                 label_name.grid(row=row, column=1, sticky=tkinter.NW, pady=pad)
                 label_value = tkinter.Label(frm, text=value, fg=color)
                 label_value.grid(row=row, column=2, sticky=tkinter.NW, pady=pad)
                 return label_name, label_value
+
             frm.ref_fname = add_info(0, "File name:", info.filename)
             frm.ref_fsize = add_info(1, "File size:", info.filesize, d_fsize)
             frm.ref_pxsize = add_info(2, "Pixel size:", info.pixelsize, d_psize)
             frm.ref_format = add_info(3, "Format:", info.imageformat)
 
+            # Error message
+            if info.error:
+                label = tkinter.Label(frm, text=info.error, fg="red2")
+                label.grid(row=4, column=1, columnspan=2, sticky=tkinter.NW)
+                frm.ref_error = label
+
             # Delete button
             btn = frm.ref_btn = tkinter.Button(frm)
             btn["text"] = "Delete"
             btn["command"] = partial(self._delete, fname, frm)
-            btn.grid(row=4, column=1, columnspan=2, sticky=tkinter.SW, pady=8)
+            btn.grid(row=5, column=1, columnspan=2, sticky=tkinter.SW, pady=8)
 
             # Keep references
             self.image_frames.append(frm)

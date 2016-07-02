@@ -176,7 +176,7 @@ class ImageDups:
             original_file_names = item.file_names
             item.check_file_names(path=path, fast=fast)
             for filename in original_file_names.difference(item.file_names):
-                print("Removing dead file reference", filename)
+                print("Removing file reference", filename)
         self.save_database()
 
     def cmd_prune(self):
