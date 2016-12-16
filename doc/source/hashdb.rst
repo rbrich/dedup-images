@@ -1,7 +1,7 @@
 :mod:`hashdb` -- Hash database
 ==============================
 
-.. automodule:: imagedups.hashdb
+.. automodule:: dedupimages.hashdb
     :members:
     :undoc-members:
     :show-inheritance:

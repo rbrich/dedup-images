@@ -2,7 +2,7 @@ import hashlib
 import os
 from itertools import combinations
 
-from .imagehash import ImageHash
+from dedupimages.imagehash import ImageHash
 
 
 class HashItem:

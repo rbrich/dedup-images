@@ -1,7 +1,7 @@
 :mod:`imagehash` -- Image hash algorithms
 =========================================
 
-.. automodule:: imagedups.imagehash
+.. automodule:: dedupimages.imagehash
 
     .. autoclass:: ImageHash
        :members:

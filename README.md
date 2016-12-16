@@ -1,30 +1,30 @@
-ImageDups
-=========
+Deduplicate Images
+==================
 
-Find duplicate or similar images. The images are compared
-not only by their bits, but also by their visual content.
-For example, this can recognise different scans of same original
-image. Or images manipulated by resize, crop, rotation,
-blur, noise or color changes.
+Tool to find duplicate or similar images. Identifies bit-wise duplicates
+first, using SHA256 hash function. Then, compares the visual content
+of the remaining images using perceptual hashes. These can recognise
+for example: different scans of same original image, recompressed
+or edited images.
 
-Imagedups is build on perceptual hash algorithms from [pHash
-library](http://phash.org/docs/design.html). Default algorithm
-is *MH*, which is very accurate, other options are *DCT* and *Radial*,
+The perceptual hash algorithms come from
+[pHash library](http://phash.org/docs/design.html). Default algorithm
+is *MH*, which is pretty accurate, other options are *DCT* and *Radial*,
 both faster and reasonably accurate.
 
 
 Usage
 -----
 
-Hash `~/Pictures` directory, recursively traversing into subdirectories (-r),
-using fast compare to detect modified files (-F) and present each group
-of similar images in GUI window (-x):
+Hash `~/Pictures` directory, recursively traversing into subdirectories (`-r`),
+using fast compare to detect modified files (`-F`) and present each group
+of similar images in GUI window (`-x`):
 
-    imagedups.py -r ~/Pictures -F -x
+    dedup-images.py -r ~/Pictures -F -x
 
-All options are documented in program help:
+Other options are documented in program help:
 
-    imagedups.py --help
+    dedup-images.py --help
 
 
 GUI
@@ -33,21 +33,19 @@ GUI
 The program contains simple GUI to show identified groups of similar images.
 Use `-x` option to switch on the GUI.
 
-![Imagedups GUI screenshot](doc/source/static/imagedups-viewer.png)
+![dedup-images GUI screenshot](doc/source/static/viewer.png)
 
-The GUI requires few common Python modules:
+The GUI requires just few common Python modules:
 
 * tkinter (python3-tk)
 * PIL + ImageTk (python3-pil, python3-pil.imagetk)
 
 I also suggest to change the image viewer to your favorite light-weight
-alternative. I use `feh`.
+alternative. I use `feh`. The default is `xdg-open`, which should open
+some viewer program on any system, but it's usually full-blown photo viewer,
+which is not good for this use case (one-time image viewing).
 
-The default `xdg-open` should open some viewer
-on any system, but it's usually full-blown photo viewer, which is not good
-for one-shot image viewing.
-
-Just edit the config file at `~/.config/imagedups.conf`.
+Edit the config file at `~/.config/dedup-images.conf` to change the viewer.
 
 
 Installation

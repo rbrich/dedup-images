@@ -5,12 +5,12 @@ import json
 import gzip
 from concurrent.futures import ThreadPoolExecutor as PoolExecutor
 
-from imagedups.imagehash import ImageHash, compute_hash
-from imagedups.hashdb import HashDB
-from imagedups.config import Config
+from dedupimages.imagehash import ImageHash, compute_hash
+from dedupimages.hashdb import HashDB
+from dedupimages.config import Config
 
 
-class ImageDups:
+class DedupImages:
 
     """Finds duplicate images using pHash library
 
@@ -19,7 +19,7 @@ class ImageDups:
         * compare hashes
 
     To compute hashes, use '--hash' command. Computed hashes are written
-    to hash database in '~/.imagedups' file.
+    to hash database in '~/.cache/dedup-images.hashdb' file.
     Use '-r' option for recursive search of images in subdirectories.
 
     To compare hashes and search for duplicates, use '--search' command.
@@ -310,10 +310,10 @@ class ImageDups:
         Returns True if view should continue, False to stop.
 
         """
-        from imagedups.viewer import ViewHelper
+        from dedupimages.viewer import ViewHelper
         if not len(file_list):
             return
-        title += " - imagedups"
+        title += " - dedup-images"
         print('* Opening GUI...', end='')
         sys.stdout.flush()
         try:

@@ -1,7 +1,7 @@
 import os.path
 
-DEFAULT_DB_PATH = '~/.cache/imagedups.hashdb'
-DEFAULT_CONF_PATH = '~/.config/imagedups.conf'
+DEFAULT_DB_PATH = '~/.cache/dedup-images.hashdb'
+DEFAULT_CONF_PATH = '~/.config/dedup-images.conf'
 
 
 class Config:
